@@ -1,0 +1,44 @@
+[
+    {
+        "location_name":"HEATHROW",
+        "code":"LHR",
+        "type":"AIRPORT",
+        "city":"LONDON"
+    },
+    {
+        "location_name":"GATWICK",
+        "code":"LGW",
+        "type":"AIRPORT",
+        "city":"LONDON"
+    },
+    {
+        "location_name":"STANSTED",
+        "code":"STN",
+        "type":"AIRPORT",
+        "city":"LONDON"
+    },
+    {
+        "location_name":"LUTON",
+        "code":"LTN",
+        "type":"AIRPORT",
+        "city":"LONDON"
+    },
+    {
+        "location_name":"CITY AIRPORT",
+        "code":"LCY",
+        "type":"AIRPORT",
+        "city":"LONDON"
+    },
+    {
+        "location_name":"SOUTHEND",
+        "code":"SEN",
+        "type":"AIRPORT",
+        "city":"LONDON"
+    },
+    {
+        "location_name":"BIGGIN HILL",
+        "code":"BQH",
+        "type":"AIRPORT",
+        "city":"LONDON"
+    }
+]
