@@ -133,4 +133,68 @@ def transform_locations(spark: SparkSession, pdf: pd.DataFrame) -> DataFrame:
  * Нужно добавить строки снизу? Используй .union().
  * Нужно добавить колонки сбоку из другой таблицы? Используй .join().
  * Нужно посчитать сумму/среднее/количество? Используй .groupBy().agg().
+import pyspark.sql.functions as F
+from pyspark.sql.window import Window
+
+class InsightCalculator:
+    def calculate_misuse(self, df):
+        # 1. Проверка на пустоту (Spark-way)
+        if df.limit(1).count() == 0:
+            return None # Или пустой DF с нужной схемой
+
+        # Спецификация окна для скользящего времени (15 мин = 900 сек)
+        # Важно: В normalizer.py timestamp должен быть приведен к .cast("long")
+        windowSpec = Window.partitionBy("user_id").orderBy("timestamp").rangeBetween(-900, 0)
+
+        # --- Anomaly 1: >10 неудачных попыток перед успехом ---
+        df_with_counts = df.withColumn(
+            "failed_attempts",
+            F.sum(F.when(F.col("status") == "fail", 1).otherwise(0)).over(windowSpec)
+        )
+        
+        result1 = df_with_counts.filter(
+            (F.col("failed_attempts") > 10) & (F.col("status") == "success")
+        ).select(
+            F.col("user_id"),
+            F.lit("M1").alias("misuse_type"),
+            F.col("failed_attempts").alias("evidence_count")
+        ).distinct()
+
+        # --- Anomaly 2: >50 скачиваний/доступов за час (3600 сек) ---
+        windowHour = Window.partitionBy("user_id").orderBy("timestamp").rangeBetween(-3600, 0)
+        
+        df_count_downloads = df.withColumn(
+            "downloads_count",
+            F.sum(F.when(F.col("action_type").isin("file_download", "access_bucket"), 1).otherwise(0)).over(windowHour)
+        )
+        
+        result2 = df_count_downloads.filter(
+            F.col("downloads_count") > 50
+        ).select(
+            F.col("user_id"),
+            F.lit("M2").alias("misuse_type"),
+            F.col("downloads_count").alias("evidence_count")
+        ).distinct()
+
+        # --- Anomaly 3: merge_to_repository БЕЗ предварительного access_secrets ---
+        # Используем неограниченное окно с начала времен до текущего момента
+        window_ever = Window.partitionBy("user_id").orderBy("timestamp").rowsBetween(Window.unboundedPreceding, 0)
+        
+        df_secrets = df.withColumn(
+            "has_secrets_access",
+            F.max(F.when(F.col("action_type") == "access_secrets", 1).otherwise(0)).over(window_ever)
+        )
+        
+        result3 = df_secrets.filter(
+            (F.col("action_type") == "merge_to_repository") & (F.col("has_secrets_access") == 0)
+        ).select(
+            F.col("user_id"),
+            F.lit("M3").alias("misuse_type"),
+            F.lit(1).alias("evidence_count") # Факт нарушения
+        ).distinct()
+
+        # --- Объединение всех результатов ---
+        final_df = result1.union(result2).union(result3)
+        
+        return final_df
 
