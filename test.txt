@@ -198,3 +198,9 @@ class InsightCalculator:
         
         return final_df
 
+from pyspark.sql.functions import col, unix_timestamp
+
+# Внутри метода normalize:
+df = df.withColumn("timestamp", unix_timestamp(col("timestamp").cast("timestamp")))
+df = df.fillna({"status": "unknown"}) # Выполняем второй TODO из комментария
+
