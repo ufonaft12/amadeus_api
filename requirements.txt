@@ -2,3 +2,5 @@ requests
 pandas
 pyspark
 pytest
+openpyxl
+pyarrow
