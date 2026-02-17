@@ -76,10 +76,61 @@ sql_results = spark.sql("""
     HAVING cnt > 1
 """)
 
-Что из этого добавить в твой проект?
-Для твоего портфолио я рекомендую добавить комбинацию:
- * .withColumn() с использованием F.when().otherwise() (Логика).
- * .groupBy().count() (Агрегация).
-Это покажет, что ты понимаешь, как превращать сырой поток данных в аналитический инсайт.
-Хочешь, я напишу для тебя готовую функцию transform_locations, которая будет использовать сразу 4-5 таких крутых методов? Будет выглядеть очень солидно для Wings Security.
+------//
+
+Да, это называется объединением (Join) или вертикальным слиянием (Union). В Data Engineering это одна из самых важных тем.
+В PySpark есть два способа «агрегировать» два разных набора данных (запроса):
+1. Union (Вертикальное объединение)
+Это когда ты берешь один список и приклеиваешь к нему снизу другой список.
+ * Условие: У обоих запросов должны быть одинаковые колонки.
+ * Пример: Ты скачал данные по Лондону, потом по Парижу, и хочешь один общий файл.
+<!-- end list -->
+# Запрос 1: Лондон
+df_london = client.fetch_locations_paginated(keyword="London")
+# Запрос 2: Париж
+df_paris = client.fetch_locations_paginated(keyword="Paris")
+
+# Объединяем их в один Spark DataFrame
+df_combined = spark.createDataFrame(df_london).union(spark.createDataFrame(df_paris))
+
+2. Join (Горизонтальное объединение)
+Это классическая «агрегация» по ключу. Когда у тебя есть две таблицы и ты хочешь соединить их боками.
+ * Пример: У тебя есть список аэропортов (с кодами IATA) и отдельный список с погодой или курсом валют для этих городов. Ты соединяешь их по колонке city или code.
+<!-- end list -->
+# Допустим, у нас есть вторая таблица с рейтингом безопасности городов
+security_data = [("London", "High"), ("Paris", "Medium")]
+security_df = spark.createDataFrame(security_data, ["city_name", "safety_level"])
+
+# Соединяем нашу основную таблицу с таблицей безопасности
+final_df = airports_df.join(
+    security_df, 
+    airports_df.city == security_df.city_name, 
+    how="left" # Оставляем все аэропорты, даже если для них нет данных о безопасности
+)
+
+3. Агрегация с группировкой (Group By + Agg)
+Если под «агрегацией двух запросов» ты имеешь в виду получение итоговой статистики из сырых данных, то это делается через groupBy.
+Пример сложной трансформации для твоего кода:
+Давай сделаем так: посчитаем количество аэропортов в каждом городе и добавим это число новой колонкой к каждой строке.
+def transform_locations(spark: SparkSession, pdf: pd.DataFrame) -> DataFrame:
+    df = spark.createDataFrame(pdf)
+    
+    # 1. Сначала чистим данные
+    cleaned_df = df.select(
+        F.col("name").alias("airport_name"),
+        F.col("`address.cityName`").alias("city")
+    ).filter(F.col("airport_name").isNotNull())
+
+    # 2. Делаем агрегацию: считаем количество портов в каждом городе
+    counts_df = cleaned_df.groupBy("city").count().withColumnRenamed("count", "total_airports_in_city")
+
+    # 3. Соединяем (Join) обратно, чтобы у каждого аэропорта была инфо о "соседях"
+    result_df = cleaned_df.join(counts_df, on="city", how="inner")
+    
+    return result_df
+
+Короткая шпаргалка:
+ * Нужно добавить строки снизу? Используй .union().
+ * Нужно добавить колонки сбоку из другой таблицы? Используй .join().
+ * Нужно посчитать сумму/среднее/количество? Используй .groupBy().agg().
 
