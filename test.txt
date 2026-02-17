@@ -1,1 +1,85 @@
-#test
+Это отличный вопрос! В PySpark (и в Big Data вообще) трансформации делятся на два типа: узкие (когда данные не перемещаются между узлами сервера) и широкие (когда данные перемешиваются, например, при группировке).
+Давай разберем "джентльменский набор" дата-инженера. Я подготовил для тебя шпаргалку самых популярных методов.
+1. Основные методы трансформации (как в SQL)
+Если ты знаешь SQL, тебе будет легко провести аналогию. В PySpark почти для каждого оператора SQL есть свой метод.
+| Операция SQL | Метод PySpark | Описание |
+|---|---|---|
+| SELECT name, code | .select("name", "code") | Выбор колонок |
+| WHERE type = 'AIRPORT' | .filter(F.col("type") == "AIRPORT") | Фильтрация строк |
+| AS alias_name | .alias("new_name") | Переименование колонки внутри select |
+| DISTINCT | .dropDuplicates() | Удаление полных дубликатов |
+| LIMIT 10 | .limit(10) | Ограничение количества строк |
+| ORDER BY name | .orderBy("name") | Сортировка (по возрастанию/убыванию) |
+2. Продвинутые трансформации (Работа с колонками)
+Здесь PySpark становится мощнее обычного SQL, так как позволяет использовать цепочки методов.
+Создание и изменение колонок (withColumn)
+# 1. Склеивание строк (Конкатенация)
+df = df.withColumn("full_info", F.concat(F.col("code"), F.lit(" - "), F.col("location_name")))
+
+# 2. Математика
+df = df.withColumn("price_with_tax", F.col("price") * 1.2)
+
+# 3. Условная логика (Аналог CASE WHEN в SQL)
+df = df.withColumn("importance", 
+    F.when(F.col("type") == "AIRPORT", "High")
+     .when(F.col("type") == "CITY", "Medium")
+     .otherwise("Low")
+)
+
+Работа с текстом и временем
+# Изменение регистра
+df = df.withColumn("upper_name", F.upper(F.col("location_name")))
+
+# Вырезание части строки (например, первые 2 буквы кода)
+df = df.withColumn("short_code", F.substring(F.col("code"), 1, 2))
+
+# Работа с датами (текущее время)
+df = df.withColumn("processed_at", F.current_timestamp())
+
+3. Агрегация и Группировка (Широкие трансформации)
+Это когда мы хотим сжать данные и посчитать статистику.
+# Посчитать количество аэропортов в каждом городе
+stats_df = df.groupBy("city").count()
+
+# Посчитать среднюю цену и максимум по группам
+stats_df = df.groupBy("city").agg(
+    F.avg("price").alias("avg_price"),
+    F.max("price").alias("max_price"),
+    F.countDistinct("code").alias("unique_airports")
+)
+
+4. Работа с NULL (Очистка данных)
+В данных из API часто бывают дыры. Инженер обязан их "залатать".
+# Удалить строки, где код или имя — NULL
+df = df.dropna(subset=["code", "location_name"])
+
+# Заполнить все пустые значения в колонке "city" текстом "N/A"
+df = df.fillna({"city": "N/A"})
+
+# Coalesce: берет первое НЕ пустое значение из списка колонок
+df = df.withColumn("final_name", F.coalesce(F.col("name"), F.col("iataCode"), F.lit("Unknown")))
+
+5. Выполнение чистого SQL
+Если тебе удобнее писать на SQL, PySpark позволяет делать и это!
+# Сначала регистрируем таблицу во временной памяти Спарка
+df.createOrReplaceTempView("my_airports")
+
+# Теперь пишем обычный SQL запрос
+sql_results = spark.sql("""
+    SELECT 
+        city, 
+        UPPER(location_name) as name,
+        COUNT(*) as cnt
+    FROM my_airports
+    WHERE type = 'AIRPORT'
+    GROUP BY city, location_name
+    HAVING cnt > 1
+""")
+
+Что из этого добавить в твой проект?
+Для твоего портфолио я рекомендую добавить комбинацию:
+ * .withColumn() с использованием F.when().otherwise() (Логика).
+ * .groupBy().count() (Агрегация).
+Это покажет, что ты понимаешь, как превращать сырой поток данных в аналитический инсайт.
+Хочешь, я напишу для тебя готовую функцию transform_locations, которая будет использовать сразу 4-5 таких крутых методов? Будет выглядеть очень солидно для Wings Security.
+
